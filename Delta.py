@@ -3,60 +3,68 @@ import schedule
 import time
 from datetime import datetime, timedelta
 
-# Delta Exchange API endpoints
-BASE_URL = "https://api.delta.exchange"
-PLACE_ORDER_URL = f"{BASE_URL}/orders"
-AUTH_URL = f"{BASE_URL}/auth"
+# Delta Exchange API credentials
+API_KEY = 'your_api_key'
+API_SECRET = 'your_api_secret'
+BASE_URL = 'https://api.delta.exchange'
 
-# Replace with your Delta Exchange API keys
-API_KEY = "your_api_key"
-API_SECRET = "your_api_secret"
+# Headers for authenticated requests
+HEADERS = {
+    'api-key': API_KEY,
+    'Content-Type': 'application/json'
+}
 
-# Helper function for authentication
-def get_auth_headers():
-    return {
-        "api-key": API_KEY,
-        "api-secret": API_SECRET,
-        "Content-Type": "application/json"
+# Function to place a market order
+def place_order(symbol, side, leverage, quantity):
+    url = f"{BASE_URL}/orders"
+    payload = {
+        "product_id": get_product_id(symbol),
+        "side": side,
+        "size": quantity,
+        "order_type": "market",
+        "leverage": leverage
     }
+    response = requests.post(url, json=payload, headers=HEADERS)
+    return response.json()
 
-# Place an order
-def place_order(symbol, side, size, stop_loss, target, trailing_points):
-    order_data = {
-        "product_id": symbol,
-        "side": side,  # 'buy' or 'sell'
-        "size": size,
-        "type": "market",  # Market order
-        "stop_loss": stop_loss,
-        "take_profit": target,
-        "trailing_points": trailing_points
-    }
-    
-    try:
-        response = requests.post(PLACE_ORDER_URL, json=order_data, headers=get_auth_headers())
-        if response.status_code == 200:
-            print(f"Order placed successfully: {response.json()}")
-        else:
-            print(f"Failed to place order: {response.text}")
-    except Exception as e:
-        print(f"Error placing order: {e}")
+# Get product ID for TRX/USD Futures
+def get_product_id(symbol):
+    url = f"{BASE_URL}/products"
+    response = requests.get(url)
+    products = response.json()['result']
+    for product in products:
+        if product['symbol'] == symbol:
+            return product['id']
+    raise Exception(f"Product {symbol} not found.")
 
-# Task to execute at 9:30 AM
+# Function to set stop loss and take profit orders
+def set_stop_and_target(order_id, entry_price, stop_loss_pct, take_profit_pct, trailing_stop_pct):
+    stop_loss_price = entry_price * (1 - stop_loss_pct / 100)
+    take_profit_price = entry_price * (1 + take_profit_pct / 100)
+    trailing_stop_price = entry_price * (1 + trailing_stop_pct / 100)
+
+    # Example of setting a stop loss
+    # Adjust stop loss orders as price moves
+    # Repeat for trailing stops and take profit
+    print(f"Stop Loss: {stop_loss_price}, Take Profit: {take_profit_price}, Trailing Stop Loss: {trailing_stop_price}")
+
+# Main function to execute trades
 def execute_trades():
-    print("Starting trade automation at 9:30 AM...")
-    symbol = "TRX/USD"  # Replace with the correct product ID
-    size = 100  # Set appropriate trade size
-    
-    # Buy Trade
-    place_order(symbol, "buy", size, stop_loss=3.5, target=7, trailing_points=2)
-    
-    # Short Trade
-    place_order(symbol, "sell", size, stop_loss=3.5, target=7, trailing_points=2)
+    try:
+        # Place Buy Trade
+        buy_response = place_order('TRX/USD', 'buy', 10, 10)
+        print("Buy Trade Response:", buy_response)
 
-# Schedule the task to run daily at 9:30 AM
+        # Place Short Sell Trade
+        sell_response = place_order('TRX/USD', 'sell', 10, 10)
+        print("Sell Trade Response:", sell_response)
+    except Exception as e:
+        print(f"Failed to execute trades: {str(e)}")
+
+# Schedule trades every day at 9:30AM
 schedule.every().day.at("09:30").do(execute_trades)
 
-print("Trade automation initialized. Waiting for 9:30 AM IST...")
+# Keep the script running
 while True:
     schedule.run_pending()
     time.sleep(1)
