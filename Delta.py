@@ -84,8 +84,8 @@ def get_order_price(order_id):
 
 # Main task to execute daily trades
 def daily_trades():
-    place_trade('TRX/USDT', 'buy', 100, 10)  # Replace quantity as needed
-    place_trade('TRX/USDT', 'sell', 100, 10)
+    place_trade('TRX/USDT', 'buy', 1, 10)  # Replace quantity as needed
+    place_trade('TRX/USDT', 'sell', 1, 10)
 
 # Schedule the task every day at 9:30 AM
 schedule.every().day.at("09:30").do(daily_trades)
