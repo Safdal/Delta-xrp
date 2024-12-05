@@ -1,68 +1,94 @@
 import requests
 import schedule
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
-# Delta Exchange API credentials
+# Delta Exchange API keys (replace with your actual keys)
 API_KEY = 'your_api_key'
 API_SECRET = 'your_api_secret'
 BASE_URL = 'https://api.delta.exchange'
 
-# Headers for authenticated requests
-HEADERS = {
+# Headers for authentication
+headers = {
     'api-key': API_KEY,
     'Content-Type': 'application/json'
 }
 
-# Function to place a market order
-def place_order(symbol, side, leverage, quantity):
-    url = f"{BASE_URL}/orders"
-    payload = {
+# Function to place a trade
+def place_trade(symbol, side, quantity, leverage):
+    # Set leverage for the trade
+    leverage_url = f"{BASE_URL}/v2/orders/leverage"
+    leverage_payload = {
         "product_id": get_product_id(symbol),
-        "side": side,
-        "size": quantity,
-        "order_type": "market",
         "leverage": leverage
     }
-    response = requests.post(url, json=payload, headers=HEADERS)
-    return response.json()
+    requests.post(leverage_url, json=leverage_payload, headers=headers)
 
-# Get product ID for TRX/USD Futures
+    # Place market order
+    order_url = f"{BASE_URL}/v2/orders"
+    order_payload = {
+        "product_id": get_product_id(symbol),
+        "size": quantity,
+        "side": side,
+        "order_type": "market"
+    }
+    response = requests.post(order_url, json=order_payload, headers=headers)
+    order_data = response.json()
+    
+    if response.status_code == 200:
+        print(f"{side.capitalize()} order placed for {symbol}: {order_data}")
+        order_id = order_data['result']['id']
+        set_stop_and_target(symbol, order_id, side)
+    else:
+        print(f"Error placing order: {response.json()}")
+
+# Function to get product ID for a given symbol
 def get_product_id(symbol):
     url = f"{BASE_URL}/products"
     response = requests.get(url)
     products = response.json()['result']
-    for product in products:
-        if product['symbol'] == symbol:
-            return product['id']
-    raise Exception(f"Product {symbol} not found.")
+    product = next((p for p in products if p['symbol'] == symbol), None)
+    return product['id'] if product else None
 
-# Function to set stop loss and take profit orders
-def set_stop_and_target(order_id, entry_price, stop_loss_pct, take_profit_pct, trailing_stop_pct):
-    stop_loss_price = entry_price * (1 - stop_loss_pct / 100)
-    take_profit_price = entry_price * (1 + take_profit_pct / 100)
-    trailing_stop_price = entry_price * (1 + trailing_stop_pct / 100)
+# Function to set stop-loss and target
+def set_stop_and_target(symbol, order_id, side):
+    entry_price = get_order_price(order_id)
+    stop_loss = calculate_stop_loss(entry_price, side)
+    target = calculate_target(entry_price, side)
+    
+    trailing_stop = {
+        "order_id": order_id,
+        "stop_price": stop_loss,
+        "target_price": target,
+        "trailing_delta": 2  # Trailing stop of 2 points
+    }
 
-    # Example of setting a stop loss
-    # Adjust stop loss orders as price moves
-    # Repeat for trailing stops and take profit
-    print(f"Stop Loss: {stop_loss_price}, Take Profit: {take_profit_price}, Trailing Stop Loss: {trailing_stop_price}")
+    # Simulate placing stop-loss and target
+    print(f"Setting stop-loss for {symbol}: {stop_loss}, target: {target}, trailing delta: 2")
 
-# Main function to execute trades
-def execute_trades():
-    try:
-        # Place Buy Trade
-        buy_response = place_order('TRX/USD', 'buy', 10, 10)
-        print("Buy Trade Response:", buy_response)
+# Helper function to calculate stop-loss
+def calculate_stop_loss(entry_price, side):
+    stop_loss = entry_price * (1 - 0.035) if side == 'buy' else entry_price * (1 + 0.035)
+    return round(stop_loss, 2)
 
-        # Place Short Sell Trade
-        sell_response = place_order('TRX/USD', 'sell', 10, 10)
-        print("Sell Trade Response:", sell_response)
-    except Exception as e:
-        print(f"Failed to execute trades: {str(e)}")
+# Helper function to calculate target
+def calculate_target(entry_price, side):
+    target = entry_price * (1 + 0.07) if side == 'buy' else entry_price * (1 - 0.07)
+    return round(target, 2)
 
-# Schedule trades every day at 9:30AM
-schedule.every().day.at("09:30").do(execute_trades)
+# Function to fetch the executed order price
+def get_order_price(order_id):
+    order_url = f"{BASE_URL}/v2/orders/{order_id}"
+    response = requests.get(order_url, headers=headers)
+    return response.json()['result']['price']
+
+# Main task to execute daily trades
+def daily_trades():
+    place_trade('TRX/USDT', 'buy', 100, 10)  # Replace quantity as needed
+    place_trade('TRX/USDT', 'sell', 100, 10)
+
+# Schedule the task every day at 9:30 AM
+schedule.every().day.at("09:30").do(daily_trades)
 
 # Keep the script running
 while True:
